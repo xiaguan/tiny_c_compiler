@@ -10,9 +10,9 @@ fn main() {
     }
 
     println!(" .global main");
-    print!("main:\n");
-    print!("    movl ${}, %eax\n", args[1].parse::<i32>().unwrap());
-    print!("    ret\n");
+    println!("main:");
+    println!("    movl ${}, %eax", args[1].parse::<i32>().unwrap());
+    println!("    ret");
 }
 
 // test the easy compiler
@@ -21,7 +21,7 @@ mod tests{
 
     use std::process::Command;
 
-    fn expr_test_func(expr : &str, expected_value : i64){
+    fn expr_test_func(expr : &str, _expected_value : i64){
         // init the compiler named "susuncc"
         // the command like "susuncc expr"
         let mut cmd = Command::new("./target/debug/susuncc");
