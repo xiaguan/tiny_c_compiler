@@ -109,3 +109,7 @@ clippy::multiple_crate_versions, // caused by the dependency, can't be fixed
 //. pub mod string_stream
 /// It could read from string or file and provide scanner the input
 pub mod string_stream;
+//. pub mod scanner 
+/// Use the string stream to read the input
+/// It could scan the input and provide parser the tokens
+pub mod scanner;
