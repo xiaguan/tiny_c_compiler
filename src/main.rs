@@ -1,27 +1,70 @@
 use std::env;
 use std::process;
 
+use env_logger::Builder;
+use log::{debug, error, info, LevelFilter};
+
+use tiny_c_compiler::scanner::{Scanner, TinyCScanner, TokenType};
+use tiny_c_compiler::string_stream::DoubleBufferStringStream;
+
 fn main() {
     let args = env::args().collect::<Vec<String>>();
+    // let mut builder = Builder::from_default_env();
+
+    // builder.filter(None, LevelFilter::Info).init();
 
     if args.len() != 2 {
-        eprintln!("{} Invalid number of argument", args[0]);
+        error!("{} Invalid number of argument", args[0]);
         process::exit(1);
     }
 
+    // init the scanner
+    let mut scanner = TinyCScanner::new(DoubleBufferStringStream::new_with_string(args[1].clone()));
+
     println!(" .global main");
     println!("main:");
-    println!("    movl ${}, %eax", args[1].parse::<i32>().unwrap());
+
+    let first_token = scanner.next_token().unwrap();
+    println!("    mov ${},%rax", first_token.number.unwrap());
+
+    // get the token from the scanner
+    while let Some(token) = scanner.next_token() {
+        if token.is_eof() {
+            break;
+        }
+        match token.token_type {
+            TokenType::Keyword => {
+                if token.string == "+" {
+                    let next_token = scanner.next_token().unwrap();
+                    println!("    add ${},%rax", next_token.number.unwrap());
+                } else if token.string == "-" {
+                    let next_token = scanner.next_token().unwrap();
+                    println!("    sub ${},%rax", next_token.number.unwrap());
+                } else {
+                    panic!("unknown keyword: {}", token.string)
+                }
+            }
+            TokenType::Number => {
+                println!("    push {}", token.string);
+            }
+            TokenType::Eof => {
+                panic!("double eof");
+            }
+        }
+    }
     println!("    ret");
 }
 
 // test the easy compiler
 #[cfg(test)]
-mod tests{
+mod tests {
 
     use std::process::Command;
 
-    fn expr_test_func(expr : &str, _expected_value : i64){
+    fn expr_test_func(expr: &str, expected_value: i32) {
+        // let mut build_cmd = Command::new("cargo");
+        // build_cmd.arg("build");
+        // build_cmd.status().unwrap().success();
         // init the compiler named "susuncc"
         // the command like "susuncc expr"
         let mut cmd = Command::new("./target/debug/susuncc");
@@ -39,15 +82,26 @@ mod tests{
             .status()
             .unwrap()
             .success());
-        // run the "tmp" file
+        // execute "./tmp" file use std::process
         // the exit code should be the same as the expr
-        assert_eq!(Command::new("./tmp").status().unwrap().code().unwrap(), expr.parse::<i32>().unwrap());
+        println!("expr: {}, expected_value: {}", expr, expected_value);
+        assert_eq!(
+            Command::new("./tmp").status().unwrap().code().unwrap(),
+            expected_value
+        );
     }
 
     #[test]
-    fn test_basic_expr_with_single_number(){
-        expr_test_func("0",0);
+    fn test_basic_expr_with_single_number() {
+        expr_test_func("0", 0);
         expr_test_func("1", 1);
-        expr_test_func("1234567", 1234567);
+        expr_test_func("123", 123);
+    }
+
+    #[test]
+    fn test_basic_expr_easy_expr() {
+        expr_test_func("1+2", 3);
+        expr_test_func("5+20-4", 21);
+        expr_test_func("1+2+3+4+5+6+7+8+9+10", 55);
     }
 }

@@ -1,21 +1,20 @@
-assert() {
-	expected="$1"
-	input="$2"
+# build the binary
+cargo build
+if [ $? -ne 0 ]; then
+	echo "cargo build failed"
+	exit 1
+fi
 
-	./target/debug/susuncc "$input" >tmp.s
-	gcc -static -o tmp tmp.s
-	./tmp
-	actual="$?"
+# otherwise the tests will concurrently
+# causing errors by writing data to 'tmp.s'
+export RUST_TEST_THREADS=1
 
-	if [ "$actual" = "$expected" ]; then
-		echo "$input => $actual"
-	else
-		echo "$input => $expected expected, but got $actual"
-		exit 1
-	fi
-}
+cargo test
 
-assert 0 0
-assert 42 42
-
-echo OK
+# test failed
+if [ $? -ne 0 ]; then
+	# print the tmp.s for debug
+	cat tmp.s
+	echo "cargo test failed"
+	exit 1
+fi
