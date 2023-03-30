@@ -4,7 +4,7 @@ use std::process;
 use env_logger::Builder;
 use log::{debug, error, info, LevelFilter};
 
-use tiny_c_compiler::scanner::{Scanner, TinyCScanner, TokenType};
+use tiny_c_compiler::scanner::{Scanner, TinyCScanner, Token};
 use tiny_c_compiler::string_stream::DoubleBufferStringStream;
 
 fn main() {
@@ -25,30 +25,25 @@ fn main() {
     println!("main:");
 
     let first_token = scanner.next_token().unwrap();
-    println!("    mov ${},%rax", first_token.number.unwrap());
+    println!("    mov ${},%rax", first_token.get_number());
 
     // get the token from the scanner
     while let Some(token) = scanner.next_token() {
         if token.is_eof() {
             break;
         }
-        match token.token_type {
-            TokenType::Keyword => {
-                if token.string == "+" {
+        match token {
+            Token::Keyword(keyword) => {
+                if keyword.eq("+") {
                     let next_token = scanner.next_token().unwrap();
-                    println!("    add ${},%rax", next_token.number.unwrap());
-                } else if token.string == "-" {
+                    println!("    add ${},%rax", next_token.get_number());
+                } else if keyword.eq("-") {
                     let next_token = scanner.next_token().unwrap();
-                    println!("    sub ${},%rax", next_token.number.unwrap());
-                } else {
-                    panic!("unknown keyword: {}", token.string)
+                    println!("    sub ${},%rax", next_token.get_number());
                 }
             }
-            TokenType::Number => {
-                println!("    push {}", token.string);
-            }
-            TokenType::Eof => {
-                panic!("double eof");
+            _ => {
+                panic!("invalid token: {:?}", token);
             }
         }
     }

@@ -1,52 +1,65 @@
 use crate::string_stream::{DoubleBufferStringStream, StreamBuffer, StringStream};
+
 // use simplel logger to print log
 use log::{debug, error, info};
+
 /// Token has three types
 /// 1. keyword
 /// 2. number
 /// 3. eof (end of file)
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum TokenType {
-    /// like `while` `+` `if` `else
-    Keyword,
-    /// unsigined or signed integer
-    Number,
+#[derive(Debug, PartialEq)]
+pub enum Token {
+    /// the token is a keyword in C
+    Keyword(String),
+    /// the token is a number
+    Number(i32),
+    /// the token is a variable's name
+    Var(String),
     /// end of file
     Eof,
-}
-
-/// Token is a pair of TokenType and the string
-#[derive(Debug, PartialEq, Eq)]
-pub struct Token {
-    /// the token's type
-    pub token_type: TokenType,
-    /// if the token is keyword ,then the stirng is the value
-    pub string: String,
-    /// if the token is number
-    pub number: Option<i32>,
+    /// the token's init state ,undefined
+    Unknown,
 }
 
 impl Token {
     pub(crate) fn new() -> Token {
-        Token {
-            token_type: TokenType::Eof,
-            string: String::new(),
-            number: None,
-        }
+        Token::Unknown
     }
 
-    // get numbe r
-    pub(crate) fn get_number(&self) -> i32 {
-        assert!(
-            !(self.token_type != TokenType::Number),
-            "Token is not a number"
-        );
-        self.number.unwrap()
+    /// If the token is a number, return the number
+    /// otherwise ,panic
+    pub fn get_number(&self) -> i32 {
+        match self {
+            Token::Number(number) => *number,
+            _ => {
+                error!("get_number: token is not a number");
+                panic!("get_number: token is not a number");
+            }
+        }
     }
 
     /// return true if the token is eof  
     pub fn is_eof(&self) -> bool {
-        return self.token_type == TokenType::Eof;
+        match self {
+            Token::Eof => true,
+            Token::Unknown => {
+                error!("is_eof() : the token is Unknown");
+                panic!("is_eof() : the token is Unknown");
+            }
+            _ => false,
+        }
+    }
+
+    /// if the token is a keyword, return the keyword
+    /// otherwise, panic
+    pub fn get_keyword(&self) -> &String {
+        match self {
+            Token::Keyword(keyword) => keyword,
+            _ => {
+                error!("get_keyword: token is not a keyword");
+                panic!("get_keyword: token is not a keyword");
+            }
+        }
     }
 }
 
@@ -61,10 +74,6 @@ pub trait Scanner {
 pub struct TinyCScanner {
     string_stream: DoubleBufferStringStream,
     current_buffer: Option<StreamBuffer>,
-}
-
-pub(crate) fn equal_token(token: &Token, token_type: TokenType, string: &str) -> bool {
-    token.token_type == token_type && token.string == string
 }
 
 // return first number and the index of the first non-digit char
@@ -94,7 +103,7 @@ impl TinyCScanner {
         let buffer = self.current_buffer.as_mut().unwrap();
         // debug the buffer
         info!("buffer cnt : {} index {} ", buffer.count, buffer.read_index);
-        let mut token = Token::new();
+        let mut token = Token::Eof;
         let mut index = buffer.read_index;
         while index < buffer.count {
             let c = buffer.buffer[index];
@@ -116,8 +125,7 @@ impl TinyCScanner {
                         .collect::<String>(),
                     number
                 );
-                token.token_type = TokenType::Number;
-                token.number = Some(number as i32);
+                token = Token::Number(number as i32);
                 break;
             } else if c.is_ascii_whitespace() {
                 // skip whitespace
@@ -126,8 +134,7 @@ impl TinyCScanner {
             } else if c == '+' || c == '-' {
                 info!("for preverse future, skip + or -");
                 index += 1;
-                token.token_type = TokenType::Keyword;
-                token.string.push(c);
+                token = Token::Keyword(c.to_string());
                 break;
             } else {
                 // error
@@ -185,8 +192,7 @@ mod tests {
             "1234".to_string(),
         ));
         let token = scanner.next_token().unwrap();
-        assert_eq!(token.token_type, TokenType::Number);
-        assert_eq!(token.number.unwrap(), 1234);
+        assert_eq!(token.get_number(), 1234);
     }
 
     #[test]
@@ -198,8 +204,7 @@ mod tests {
         let mut scanner =
             TinyCScanner::new(DoubleBufferStringStream::new_with_string("+".to_string()));
         let token = scanner.next_token().unwrap();
-        assert_eq!(token.token_type, TokenType::Keyword);
-        assert_eq!(token.string, "+");
+        assert_eq!(token.get_keyword(), "+");
     }
 
     #[test]
@@ -212,11 +217,9 @@ mod tests {
             "1234 +".to_string(),
         ));
         let token = scanner.next_token().unwrap();
-        assert_eq!(token.token_type, TokenType::Number);
-        assert_eq!(token.number.unwrap(), 1234);
+        assert_eq!(token.get_number(), 1234);
         let token = scanner.next_token().unwrap();
-        assert_eq!(token.token_type, TokenType::Keyword);
-        assert_eq!(token.string, "+");
+        assert_eq!(token.get_keyword(), "+");
     }
 
     #[test]
@@ -230,14 +233,10 @@ mod tests {
             "1234 + 1234".to_string(),
         ));
         let token = scanner.next_token().unwrap();
-        assert_eq!(token.token_type, TokenType::Number);
-        assert_eq!(token.number.unwrap(), 1234);
+        assert_eq!(token.get_number(), 1234);
         let token = scanner.next_token().unwrap();
-        assert_eq!(token.token_type, TokenType::Keyword);
-        assert_eq!(token.string, "+");
+        assert_eq!(token.get_keyword(), "+");
         let token = scanner.next_token().unwrap();
-        assert_eq!(token.token_type, TokenType::Number);
-        assert_eq!(token.number.unwrap(), 1234);
+        assert_eq!(token.get_number(), 1234);
     }
 }
-
