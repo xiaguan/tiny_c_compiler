@@ -13,12 +13,14 @@ use crate::scanner::{KeywordType, Scanner, TinyCScanner, Token};
 
 use log::{debug, info};
 
+/// `TinyCParser` is responsible for parsing tokens and providing the AST.
 pub struct TinyCParser {
     scanner: TinyCScanner,
     current_token: Token,
 }
 
 impl TinyCParser {
+    /// Constructs a new `TinyCParser`
     pub fn new(mut scanner: TinyCScanner) -> TinyCParser {
         let current_token = scanner.next_token();
         TinyCParser {
@@ -27,11 +29,17 @@ impl TinyCParser {
         }
     }
 
+    /// Returns the current token
     pub fn get_current_token(&self) -> &Token {
         &self.current_token
     }
 
-    // expr = mul ('+' mul | '-' mul)*
+    /// Updates the current token to the next token from the scanner
+    fn next(&mut self) {
+        self.current_token = self.scanner.next_token();
+    }
+
+    /// Parses an expression according to the rule: expr = mul ('+' mul | '-' mul)*
     pub fn expr(&mut self) -> Node {
         let mut node = self.mul();
         debug!(" expr: {:?}", node);
@@ -59,11 +67,7 @@ impl TinyCParser {
         }
     }
 
-    fn next(&mut self) {
-        self.current_token = self.scanner.next_token();
-    }
-
-    // mul = primary ('*' primary | '/' primary)*
+    /// Parses a mul expression according to the rule: mul = primary ('*' primary | '/' primary)*
     fn mul(&mut self) -> Node {
         let mut node = self.primary();
         loop {
@@ -90,6 +94,7 @@ impl TinyCParser {
         }
     }
 
+    /// Parses a primary expression, which is a number or a bracketed expression.
     fn primary(&mut self) -> Node {
         match self.current_token {
             Token::Number(n) => {
@@ -97,10 +102,9 @@ impl TinyCParser {
                 info!(" primary: get a number: {}", n);
                 Node::from_num(n)
             }
-            // I don't like this code style.
             Token::Keyword(ref keyword) => match keyword {
                 KeywordType::Lbracket => {
-                    debug!("parimary: get a left bracket try to get a expr");
+                    debug!("primary: get a left bracket try to get an expr");
                     self.next();
                     let node = self.expr();
                     match self.current_token {

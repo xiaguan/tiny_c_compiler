@@ -122,48 +122,64 @@ pub(crate) fn strol(string: &[char], index: &mut usize) -> u64 {
     number
 }
 
+/// This helper method parses a number token from the buffer.
+fn parse_number_token(buffer: &StreamBuffer, index: &mut usize) -> Token {
+    let number_start = *index;
+    let number = strol(&buffer.buffer, index);
+    info!(
+        "Parsed \"{}\" into number {}",
+        &buffer.buffer[number_start..*index]
+            .iter()
+            .collect::<String>(),
+        number
+    );
+    Token::Number(number as i64)
+}
+
+/// This helper method parses a keyword token from the buffer.
+fn parse_keyword_token(c: char, index: &mut usize) -> Token {
+    info!("Recognized a keyword char: {}", c);
+    *index += 1;
+    Token::Keyword(KeywordType::from_char(c))
+}
+
 impl TinyCScanner {
+    /// This method generates the next token from the current buffer.
+    /// It recognizes ASCII digits, ASCII whitespaces, and special keyword characters.
+    ///
+    /// # Panics
+    ///
+    /// The method will panic if it encounters an invalid character.
     fn make_next_token(&mut self) -> Token {
         let buffer = self.current_buffer.as_mut().unwrap();
-        // debug the buffer
-        info!("buffer cnt : {} index {} ", buffer.count, buffer.read_index);
+
+        info!(
+            "Buffer content count: {}, Read index: {}",
+            buffer.count, buffer.read_index
+        );
+
+        // Start with EOF token, change if another token is recognized
         let mut token = Token::Eof;
         let mut index = buffer.read_index;
-        while index < buffer.count {
-            let c = buffer.buffer[index];
-            if c.is_ascii_digit() {
-                // get the number
-                let before_index = index;
-                // info!(
-                //     "current buf {}",
-                //     &buffer.buffer[before_index..].iter().collect::<String>()
-                // );
-                let number = strol(&buffer.buffer, &mut index);
-                // debug the number
-                info!(
-                    "parse from buffer \"{}\" to number {}",
-                    &buffer.buffer[before_index..index]
-                        .iter()
-                        .collect::<String>(),
-                    number
-                );
-                token = Token::Number(number as i64);
-                break;
-            } else if c.is_ascii_whitespace() {
-                info!("skip whitespace");
-                index += 1;
-            } else if c == '+' || c == '-' || c == '*' || c == '/' || c == '(' || c == ')' {
-                info!("get a keyword char: {}", c);
-                index += 1;
-                token = Token::Keyword(KeywordType::from_char(c));
-                break;
-            } else {
-                // error
-                error!("TinyCScanner: invalid char: {}", c);
-                panic!("TinyCScanner: invalid char: {}", c);
+
+        for &c in &buffer.buffer[index..buffer.count] {
+            match c {
+                _ if c.is_ascii_digit() => {
+                    token = parse_number_token(buffer, &mut index);
+                    break;
+                }
+                _ if c.is_ascii_whitespace() => {
+                    info!("Skipping whitespace");
+                    index += 1;
+                }
+                '+' | '-' | '*' | '/' | '(' | ')' => {
+                    token = parse_keyword_token(c, &mut index);
+                    break;
+                }
+                _ => panic!("TinyCScanner: Invalid char: {}", c),
             }
         }
-        // update the read index
+
         buffer.read_index = index;
         token
     }
