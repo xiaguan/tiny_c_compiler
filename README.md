@@ -1,9 +1,34 @@
-# tiny_c_compiler
-A c tiny c compiler in rust. 
+# Tiny C Compiler
+
+This project is heavily influenced by the [chibicc](https://github.com/rui314/chibicc) project, specifically its 5th commit.
+
+## What does it do?
+
+The main purpose of this project is to parse expressions and generate assembly code. For example, you can use the following command:
 
 ```
-我希望你帮我重构rust代码,我认为好的rust代码应该是这样的
-函数，数据结构，都根据rust文档风格有相应注释，但不能太多，尽可能精炼
-有清晰的日志打印
-能通过clippy的大部分检测
+cargo run 1+2
 ```
+
+This will print the generated assembly code to the standard output:
+
+```
+.globl main
+main:
+    mov $2, %rax
+    push %rax
+    mov $1, %rax
+    pop %rdi
+    add %rdi, %rax
+    ret
+```
+
+You can then use `gcc` to compile it into an executable file, allowing you to run it:
+
+```
+gcc -static -o tmp tmp.s
+```
+
+The result of the expression will be the return value of the program, which is the value stored in the `rax` register.
+
+For more supported expressions, you can refer to the tests in `main.rs`.
