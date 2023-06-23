@@ -3,6 +3,34 @@ use crate::string_stream::{DoubleBufferStringStream, StreamBuffer, StringStream}
 // use simplel logger to print log
 use log::{debug, error, info};
 
+#[derive(Debug, PartialEq)]
+pub enum KeywordType {
+    Mul,
+    Div,
+    Add,
+    Sub,
+    Lbracket,
+    Rbracket,
+}
+
+impl KeywordType {
+    // construct a keyword type from a char
+    pub fn from_char(c: char) -> KeywordType {
+        match c {
+            '*' => KeywordType::Mul,
+            '/' => KeywordType::Div,
+            '+' => KeywordType::Add,
+            '-' => KeywordType::Sub,
+            '(' => KeywordType::Lbracket,
+            ')' => KeywordType::Rbracket,
+            _ => {
+                error!("from_char: invalid char: {}", c);
+                panic!("from_char: invalid char: {}", c);
+            }
+        }
+    }
+}
+
 /// Token has three types
 /// 1. keyword
 /// 2. number
@@ -10,9 +38,9 @@ use log::{debug, error, info};
 #[derive(Debug, PartialEq)]
 pub enum Token {
     /// the token is a keyword in C
-    Keyword(String),
+    Keyword(KeywordType),
     /// the token is a number
-    Number(i32),
+    Number(i64),
     /// the token is a variable's name
     Var(String),
     /// end of file
@@ -22,13 +50,9 @@ pub enum Token {
 }
 
 impl Token {
-    pub(crate) fn new() -> Token {
-        Token::Unknown
-    }
-
     /// If the token is a number, return the number
     /// otherwise ,panic
-    pub fn get_number(&self) -> i32 {
+    pub fn get_number(&self) -> i64 {
         match self {
             Token::Number(number) => *number,
             _ => {
@@ -52,7 +76,7 @@ impl Token {
 
     /// if the token is a keyword, return the keyword
     /// otherwise, panic
-    pub fn get_keyword(&self) -> &String {
+    pub fn get_keyword(&self) -> &KeywordType {
         match self {
             Token::Keyword(keyword) => keyword,
             _ => {
@@ -66,7 +90,7 @@ impl Token {
 /// basic scanner trait
 pub trait Scanner {
     /// get teh next token from the Scanner
-    fn next_token(&mut self) -> Option<Token>;
+    fn next_token(&mut self) -> Token;
 }
 
 #[derive(Debug)]
@@ -110,31 +134,28 @@ impl TinyCScanner {
             if c.is_ascii_digit() {
                 // get the number
                 let before_index = index;
-                info!(
-                    "current buf {}",
-                    &buffer.buffer[before_index..].iter().collect::<String>()
-                );
+                // info!(
+                //     "current buf {}",
+                //     &buffer.buffer[before_index..].iter().collect::<String>()
+                // );
                 let number = strol(&buffer.buffer, &mut index);
                 // debug the number
                 info!(
-                    "parse from buffer: {} to {} str \"{}\" number {}",
-                    before_index,
-                    index,
+                    "parse from buffer \"{}\" to number {}",
                     &buffer.buffer[before_index..index]
                         .iter()
                         .collect::<String>(),
                     number
                 );
-                token = Token::Number(number as i32);
+                token = Token::Number(number as i64);
                 break;
             } else if c.is_ascii_whitespace() {
-                // skip whitespace
-                index += 1;
                 info!("skip whitespace");
-            } else if c == '+' || c == '-' {
-                info!("for preverse future, skip + or -");
                 index += 1;
-                token = Token::Keyword(c.to_string());
+            } else if c == '+' || c == '-' || c == '*' || c == '/' || c == '(' || c == ')' {
+                info!("get a keyword char: {}", c);
+                index += 1;
+                token = Token::Keyword(KeywordType::from_char(c));
                 break;
             } else {
                 // error
@@ -158,20 +179,19 @@ impl TinyCScanner {
 
 // impl Scanner
 impl Scanner for TinyCScanner {
-    fn next_token(&mut self) -> Option<Token> {
+    fn next_token(&mut self) -> Token {
         // get the current buffer
         if self.current_buffer.is_none() {
             self.current_buffer = self.string_stream.next_buffer();
             if self.current_buffer.is_none() {
-                return None;
+                return Token::Eof;
             } else {
                 info!("get a new buffer");
             }
         }
         let token = self.make_next_token();
-        // debug the token
         debug!("scanner next token: {:?}", token);
-        Some(token)
+        token
     }
 }
 
@@ -191,7 +211,7 @@ mod tests {
         let mut scanner = TinyCScanner::new(DoubleBufferStringStream::new_with_string(
             "1234".to_string(),
         ));
-        let token = scanner.next_token().unwrap();
+        let token = scanner.next_token();
         assert_eq!(token.get_number(), 1234);
     }
 
@@ -203,8 +223,8 @@ mod tests {
         use super::*;
         let mut scanner =
             TinyCScanner::new(DoubleBufferStringStream::new_with_string("+".to_string()));
-        let token = scanner.next_token().unwrap();
-        assert_eq!(token.get_keyword(), "+");
+        let token = scanner.next_token();
+        assert_eq!(*token.get_keyword(), KeywordType::Add);
     }
 
     #[test]
@@ -216,10 +236,10 @@ mod tests {
         let mut scanner = TinyCScanner::new(DoubleBufferStringStream::new_with_string(
             "1234 +".to_string(),
         ));
-        let token = scanner.next_token().unwrap();
+        let token = scanner.next_token();
         assert_eq!(token.get_number(), 1234);
-        let token = scanner.next_token().unwrap();
-        assert_eq!(token.get_keyword(), "+");
+        let token = scanner.next_token();
+        assert_eq!(*token.get_keyword(), KeywordType::Add);
     }
 
     #[test]
@@ -232,11 +252,11 @@ mod tests {
         let mut scanner = TinyCScanner::new(DoubleBufferStringStream::new_with_string(
             "1234 + 1234".to_string(),
         ));
-        let token = scanner.next_token().unwrap();
+        let token = scanner.next_token();
         assert_eq!(token.get_number(), 1234);
-        let token = scanner.next_token().unwrap();
-        assert_eq!(token.get_keyword(), "+");
-        let token = scanner.next_token().unwrap();
+        let token = scanner.next_token();
+        assert_eq!(*token.get_keyword(), KeywordType::Add);
+        let token = scanner.next_token();
         assert_eq!(token.get_number(), 1234);
     }
 }

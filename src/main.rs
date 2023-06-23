@@ -1,17 +1,17 @@
 use std::env;
 use std::process;
 
-use env_logger::Builder;
-use log::{debug, error, info, LevelFilter};
+use log::{debug, error};
 
-use tiny_c_compiler::scanner::{Scanner, TinyCScanner, Token};
+use tiny_c_compiler::parser::TinyCParser;
+use tiny_c_compiler::scanner::{TinyCScanner, Token};
 use tiny_c_compiler::string_stream::DoubleBufferStringStream;
 
 fn main() {
+    // enable the log  print debug info
+    env::set_var("RUST_LOG", "debug");
+    //env_logger::init();
     let args = env::args().collect::<Vec<String>>();
-    // let mut builder = Builder::from_default_env();
-
-    // builder.filter(None, LevelFilter::Info).init();
 
     if args.len() != 2 {
         error!("{} Invalid number of argument", args[0]);
@@ -19,34 +19,21 @@ fn main() {
     }
 
     // init the scanner
-    let mut scanner = TinyCScanner::new(DoubleBufferStringStream::new_with_string(args[1].clone()));
+    let scanner = TinyCScanner::new(DoubleBufferStringStream::new_with_string(args[1].clone()));
 
-    println!(" .global main");
+    debug!("start to parse the expr");
+    let mut parser = TinyCParser::new(scanner);
+
+    let node = parser.expr();
+
+    debug_assert_eq!(parser.get_current_token(), &Token::Eof);
+
+    debug!("parse the expr success: {:?}", node);
+
+    println!("  .globl main");
     println!("main:");
-
-    let first_token = scanner.next_token().unwrap();
-    println!("    mov ${},%rax", first_token.get_number());
-
-    // get the token from the scanner
-    while let Some(token) = scanner.next_token() {
-        if token.is_eof() {
-            break;
-        }
-        match token {
-            Token::Keyword(keyword) => {
-                if keyword.eq("+") {
-                    let next_token = scanner.next_token().unwrap();
-                    println!("    add ${},%rax", next_token.get_number());
-                } else if keyword.eq("-") {
-                    let next_token = scanner.next_token().unwrap();
-                    println!("    sub ${},%rax", next_token.get_number());
-                }
-            }
-            _ => {
-                panic!("invalid token: {:?}", token);
-            }
-        }
-    }
+    // generate the assembly code
+    tiny_c_compiler::codegen::gen_expr(&node);
     println!("    ret");
 }
 
@@ -94,9 +81,47 @@ mod tests {
     }
 
     #[test]
-    fn test_basic_expr_easy_expr() {
+    fn test_basic_add() {
         expr_test_func("1+2", 3);
+        expr_test_func("1+2+3", 6);
+        expr_test_func("1+2+3+4", 10);
+    }
+
+    #[test]
+    fn test_basic_sub() {
+        // notice! the sub operation is not support the negative number
+        expr_test_func("4-2", 2);
+        expr_test_func("4-2-1", 1);
+        expr_test_func("4-2-1-1", 0);
+    }
+
+    #[test]
+    fn test_basic_mul() {
+        expr_test_func("1*2", 2);
+        expr_test_func("1*2*3", 6);
+        expr_test_func("1*2*3*4", 24);
+    }
+
+    #[test]
+    fn test_basic_div() {
+        expr_test_func("4/2", 2);
+        expr_test_func("4/2/2", 1);
+        expr_test_func("4/2/2/2", 0);
+    }
+
+    #[test]
+    fn test_basic_bracket() {
+        expr_test_func("(1+2)", 3);
+        expr_test_func("(1+2)*3", 9);
+        expr_test_func("(1+2)*(3+4)", 21);
+    }
+
+    #[test]
+    fn test_basic_expr_easy_expr() {
         expr_test_func("5+20-4", 21);
-        expr_test_func("1+2+3+4+5+6+7+8+9+10", 55);
+        expr_test_func("12+34-5", 41);
+        expr_test_func("5+6*7", 47);
+        expr_test_func("5*(9-6)", 15);
+        expr_test_func("(3+5)/2", 4);
     }
 }

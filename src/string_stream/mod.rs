@@ -1,4 +1,4 @@
-use std::{fs::File, ops::Add};
+use std::fs::File;
 
 use log::info;
 
@@ -50,7 +50,7 @@ impl DoubleBufferStringStream {
 
     /// new a stream with a string
     pub fn new_with_string(string: String) -> DoubleBufferStringStream {
-        info!("new a stream with a string {}", string);
+        info!("create a stream with a string ${}$", string);
         let mut stream = DoubleBufferStringStream::new();
         stream.open_with_string(string);
         stream
