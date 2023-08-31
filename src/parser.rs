@@ -102,26 +102,23 @@ impl TinyCParser {
                 info!(" primary: get a number: {}", n);
                 Node::from_num(n)
             }
-            Token::Keyword(ref keyword) => match keyword {
-                KeywordType::Lbracket => {
-                    debug!("primary: get a left bracket try to get an expr");
-                    self.next();
-                    let node = self.expr();
-                    match self.current_token {
-                        Token::Keyword(ref keyword) => {
-                            if *keyword == KeywordType::Rbracket {
-                                // skip the right bracket
-                                self.next();
-                                node
-                            } else {
-                                panic!("primary: expect a right bracket");
-                            }
+            Token::Keyword(KeywordType::Lbracket) => {
+                debug!("primary: get a left bracket try to get an expr");
+                self.next();
+                let node = self.expr();
+                match self.current_token {
+                    Token::Keyword(ref keyword) => {
+                        if *keyword == KeywordType::Rbracket {
+                            // skip the right bracket
+                            self.next();
+                            node
+                        } else {
+                            panic!("primary: expect a right bracket");
                         }
-                        _ => panic!("primary: expect a right bracket"),
                     }
+                    _ => panic!("primary: expect a right bracket"),
                 }
-                _ => panic!("primary: expect a number or a left bracket"),
-            },
+            }
             _ => panic!("primary: expect a number or a left bracket"),
         }
     }

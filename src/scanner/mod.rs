@@ -1,4 +1,4 @@
-use crate::string_stream::{DoubleBufferStringStream, StreamBuffer, StringStream};
+use crate::stream::{BasicStream, Stream};
 
 // use simplel logger to print log
 use log::{debug, error, info};
@@ -80,8 +80,7 @@ impl Token {
         match self {
             Token::Keyword(keyword) => keyword,
             _ => {
-                error!("get_keyword: token is not a keyword");
-                panic!("get_keyword: token is not a keyword");
+                panic!("get_keyword: token is not a keyword: {:?}", self);
             }
         }
     }
@@ -89,51 +88,33 @@ impl Token {
 
 /// basic scanner trait
 pub trait Scanner {
-    /// get teh next token from the Scanner
+    /// get the next token from the Scanner
     fn next_token(&mut self) -> Token;
 }
 
 #[derive(Debug)]
 /// easy scanner for test
 pub struct TinyCScanner {
-    string_stream: DoubleBufferStringStream,
-    current_buffer: Option<StreamBuffer>,
+    string_stream: BasicStream,
+    current_buffer: Option<String>,
+    cursor: usize,
 }
 
-// return first number and the index of the first non-digit char
-// if the string is empty, return (0,0)
-pub(crate) fn strol(string: &[char], index: &mut usize) -> u64 {
-    let mut number = 0;
-
-    if string.is_empty() {
-        error!("strol: string is empty");
-        panic!("strol: string is empty");
-    }
-
-    while *index < string.len() {
-        let c = string[*index];
+/// This helper method parses a number token from the buffer.
+fn parse_number_token(buffer: &str, index: &mut usize) -> Token {
+    let start = *index;
+    let mut end = start;
+    // Range the str get the number end position
+    for c in buffer[*index..].chars() {
         if c.is_ascii_digit() {
-            number = number * 10 + (c as u64 - '0' as u64);
-            *index += 1;
+            end += 1;
         } else {
             break;
         }
     }
-    number
-}
-
-/// This helper method parses a number token from the buffer.
-fn parse_number_token(buffer: &StreamBuffer, index: &mut usize) -> Token {
-    let number_start = *index;
-    let number = strol(&buffer.buffer, index);
-    info!(
-        "Parsed \"{}\" into number {}",
-        &buffer.buffer[number_start..*index]
-            .iter()
-            .collect::<String>(),
-        number
-    );
-    Token::Number(number as i64)
+    let number: i64 = buffer[start..end].parse().unwrap();
+    *index = end;
+    Token::Number(number)
 }
 
 /// This helper method parses a keyword token from the buffer.
@@ -153,16 +134,15 @@ impl TinyCScanner {
     fn make_next_token(&mut self) -> Token {
         let buffer = self.current_buffer.as_mut().unwrap();
 
-        info!(
-            "Buffer content count: {}, Read index: {}",
-            buffer.count, buffer.read_index
-        );
-
         // Start with EOF token, change if another token is recognized
         let mut token = Token::Eof;
-        let mut index = buffer.read_index;
+        let mut index = self.cursor;
 
-        for &c in &buffer.buffer[index..buffer.count] {
+        if index >= buffer.len() {
+            return Token::Eof;
+        }
+
+        for c in buffer[index..].chars() {
             match c {
                 _ if c.is_ascii_digit() => {
                     token = parse_number_token(buffer, &mut index);
@@ -180,15 +160,16 @@ impl TinyCScanner {
             }
         }
 
-        buffer.read_index = index;
+        self.cursor = index;
         token
     }
 
     /// new
-    pub fn new(string_stream: DoubleBufferStringStream) -> TinyCScanner {
+    pub fn new(string_stream: BasicStream) -> TinyCScanner {
         TinyCScanner {
             string_stream,
             current_buffer: None,
+            cursor: 0,
         }
     }
 }
@@ -198,7 +179,7 @@ impl Scanner for TinyCScanner {
     fn next_token(&mut self) -> Token {
         // get the current buffer
         if self.current_buffer.is_none() {
-            self.current_buffer = self.string_stream.next_buffer();
+            self.current_buffer = self.string_stream.next();
             if self.current_buffer.is_none() {
                 return Token::Eof;
             } else {
@@ -214,65 +195,56 @@ impl Scanner for TinyCScanner {
 // test
 #[cfg(test)]
 mod tests {
+    use super::*;
 
-    use env_logger::Builder;
-    use log::LevelFilter;
+    fn create_scanner(string: String) -> TinyCScanner {
+        TinyCScanner::new(BasicStream::new_with_string(string))
+    }
+
+    fn assert_next_number(scanner: &mut TinyCScanner, number: i64) {
+        let token = scanner.next_token();
+        assert_eq!(token, Token::Number(number));
+    }
+
+    fn assert_next_keyword(scanner: &mut TinyCScanner, keyword: KeywordType) {
+        let token = scanner.next_token();
+        assert_eq!(token, Token::Keyword(keyword));
+    }
+
+    #[test]
+    fn test_scanner_eof() {
+        let mut scanner = create_scanner("".to_string());
+        assert_eq!(scanner.next_token(), Token::Eof);
+    }
 
     #[test]
     fn test_scanner_parse_number() {
-        let mut builder = Builder::from_default_env();
-
-        builder.filter(None, LevelFilter::Info).try_init();
-        use super::*;
-        let mut scanner = TinyCScanner::new(DoubleBufferStringStream::new_with_string(
-            "1234".to_string(),
-        ));
-        let token = scanner.next_token();
-        assert_eq!(token.get_number(), 1234);
+        let mut scanner = create_scanner("1234".to_owned());
+        assert_next_number(&mut scanner, 1234)
     }
 
     #[test]
     fn test_sacnner_parse_keyword() {
-        let mut builder = Builder::from_default_env();
-
-        builder.filter(None, LevelFilter::Info).try_init();
-        use super::*;
-        let mut scanner =
-            TinyCScanner::new(DoubleBufferStringStream::new_with_string("+".to_string()));
-        let token = scanner.next_token();
-        assert_eq!(*token.get_keyword(), KeywordType::Add);
+        let mut scanner = create_scanner("+-*/()".to_owned());
+        assert_next_keyword(&mut scanner, KeywordType::Add);
+        assert_next_keyword(&mut scanner, KeywordType::Sub);
+        assert_next_keyword(&mut scanner, KeywordType::Mul);
+        assert_next_keyword(&mut scanner, KeywordType::Div);
+        assert_next_keyword(&mut scanner, KeywordType::Lbracket);
+        assert_next_keyword(&mut scanner, KeywordType::Rbracket);
+        assert_eq!(scanner.next_token(), Token::Eof);
     }
 
     #[test]
     fn test_scanner_parse_number_and_keyword() {
-        let mut builder = Builder::from_default_env();
-
-        builder.filter(None, LevelFilter::Info).try_init();
-        use super::*;
-        let mut scanner = TinyCScanner::new(DoubleBufferStringStream::new_with_string(
-            "1234 +".to_string(),
-        ));
-        let token = scanner.next_token();
-        assert_eq!(token.get_number(), 1234);
-        let token = scanner.next_token();
-        assert_eq!(*token.get_keyword(), KeywordType::Add);
-    }
-
-    #[test]
-    fn test_scanner_parse_expr() {
-        let mut builder = Builder::from_default_env();
-
-        builder.filter(None, LevelFilter::Info).try_init();
-
-        use super::*;
-        let mut scanner = TinyCScanner::new(DoubleBufferStringStream::new_with_string(
-            "1234 + 1234".to_string(),
-        ));
-        let token = scanner.next_token();
-        assert_eq!(token.get_number(), 1234);
-        let token = scanner.next_token();
-        assert_eq!(*token.get_keyword(), KeywordType::Add);
-        let token = scanner.next_token();
-        assert_eq!(token.get_number(), 1234);
+        let mut scanner = create_scanner("123+456/789*0".to_owned());
+        assert_next_number(&mut scanner, 123);
+        assert_next_keyword(&mut scanner, KeywordType::Add);
+        assert_next_number(&mut scanner, 456);
+        assert_next_keyword(&mut scanner, KeywordType::Div);
+        assert_next_number(&mut scanner, 789);
+        assert_next_keyword(&mut scanner, KeywordType::Mul);
+        assert_next_number(&mut scanner, 0);
+        assert_eq!(scanner.next_token(), Token::Eof);
     }
 }
